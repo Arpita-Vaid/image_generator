@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Image Generator</title>
+  <meta name="description" content="Generate stunning AI images from text prompts using Stable Diffusion XL."/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #13131a;
+      --card: #1a1a26;
+      --border: #2a2a3d;
+      --accent: #7c3aed;
+      --accent2: #a855f7;
+      --glow: rgba(124, 58, 237, 0.35);
+      --text: #f0f0ff;
+      --muted: #8888aa;
+      --error: #f87171;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px 60px;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124,58,237,0.18) 0%, transparent 70%);
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    header .badge {
+      display: inline-block;
+      background: rgba(124,58,237,0.15);
+      border: 1px solid rgba(124,58,237,0.4);
+      color: var(--accent2);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 4px 14px;
+      border-radius: 99px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 700;
+      background: linear-gradient(135deg, #fff 30%, var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.2;
+      margin-bottom: 12px;
+    }
+
+    header p {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      width: 100%;
+      max-width: 700px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    #prompt {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      resize: none;
+      height: 52px;
+      line-height: 1.5;
+    }
+
+    #prompt:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--glow);
+    }
+
+    #prompt::placeholder { color: var(--muted); }
+
+    #generate-btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none;
+      border-radius: 12px;
+      padding: 14px 24px;
+      color: #fff;
+      font-family: 'Outfit', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+      box-shadow: 0 4px 20px rgba(124,58,237,0.4);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #generate-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(124,58,237,0.55);
+    }
+
+    #generate-btn:active:not(:disabled) { transform: translateY(0); }
+
+    #generate-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* Output Area */
+    #output-area {
+      min-height: 360px;
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface);
+      border: 1px dashed var(--border);
+      position: relative;
+      transition: border-color 0.3s;
+    }
+
+    #output-area.has-image {
+      border-style: solid;
+      border-color: var(--accent);
+    }
+
+    .placeholder {
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .placeholder svg {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 16px;
+      opacity: 0.35;
+      display: block;
+    }
+
+    .placeholder p { font-size: 0.95rem; }
+
+    /* Loader */
+    .loader {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .spinner {
+      width: 52px;
+      height: 52px;
+      border: 3px solid rgba(124,58,237,0.2);
+      border-top-color: var(--accent2);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loader p {
+      color: var(--muted);
+      font-size: 0.95rem;
+      animation: pulse 1.8s ease-in-out infinite;
+    }
+
+    @keyframes pulse { 0%,100% { opacity:0.5 } 50% { opacity:1 } }
+
+    #result-img {
+      display: none;
+      width: 100%;
+      border-radius: 14px;
+      object-fit: contain;
+      max-height: 520px;
+      animation: fadeIn 0.5s ease;
+    }
+
+    @keyframes fadeIn { from { opacity:0; transform:scale(0.97) } to { opacity:1; transform:scale(1) } }
+
+    #error-msg {
+      color: var(--error);
+      font-size: 0.9rem;
+      text-align: center;
+      display: none;
+      padding: 12px;
+    }
+
+    .footer-actions {
+      margin-top: 16px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 18px;
+      color: var(--muted);
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.88rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .btn-secondary:hover { color: var(--text); border-color: var(--accent); }
+
+    footer {
+      margin-top: 48px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="badge">✦ Powered by Stable Diffusion XL</div>
+  <h1>AI Image Generator</h1>
+  <p>Describe anything — watch it come to life in seconds.</p>
+</header>
+
+<div class="card">
+  <div class="input-group">
+    <textarea
+      id="prompt"
+      placeholder="A futuristic city at sunset, cinematic lighting, 4K..."
+      rows="1"
+    ></textarea>
+    <button id="generate-btn" onclick="generateImage()">
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+      </svg>
+      Generate
+    </button>
+  </div>
+
+  <div id="output-area">
+    <!-- Placeholder -->
+    <div class="placeholder" id="placeholder">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
+        <rect x="3" y="3" width="18" height="18" rx="3"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <path d="M21 15l-5-5L5 21"/>
+      </svg>
+      <p>Your generated image will appear here</p>
+    </div>
+
+    <!-- Loader -->
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      <p>Generating your image…</p>
+    </div>
+
+    <!-- Result -->
+    <img id="result-img" alt="Generated image"/>
+
+    <!-- Error -->
+    <div id="error-msg"></div>
+  </div>
+
+  <div class="footer-actions" id="footer-actions" style="display:none">
+    <button class="btn-secondary" onclick="downloadImage()">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Download
+    </button>
+  </div>
+</div>
+
+<footer>Built with Flask &amp; HuggingFace Inference API</footer>
+
+<script>
+  let currentB64 = null;
+
+  const promptEl = document.getElementById("prompt");
+
+  // Auto-resize textarea
+  promptEl.addEventListener("input", () => {
+    promptEl.style.height = "52px";
+    promptEl.style.height = promptEl.scrollHeight + "px";
+  });
+
+  // Enter to submit (Shift+Enter for newline)
+  promptEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      generateImage();
+    }
+  });
+
+  async function generateImage() {
+    const prompt = promptEl.value.trim();
+    if (!prompt) {
+      showError("Please enter a prompt first.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch("/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        showError(data.error || "Something went wrong.");
+        return;
+      }
+
+      currentB64 = data.image;
+      showImage("data:image/png;base64," + data.image);
+    } catch (err) {
+      showError("Network error. Is Flask running?");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function setLoading(loading) {
+    const btn = document.getElementById("generate-btn");
+    const loader = document.getElementById("loader");
+    const placeholder = document.getElementById("placeholder");
+    const img = document.getElementById("result-img");
+    const err = document.getElementById("error-msg");
+    const footer = document.getElementById("footer-actions");
+    const area = document.getElementById("output-area");
+
+    btn.disabled = loading;
+    btn.innerHTML = loading
+      ? `<div class="spinner" style="width:18px;height:18px;border-width:2px;"></div> Generating…`
+      : `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Generate`;
+
+    if (loading) {
+      placeholder.style.display = "none";
+      loader.style.display = "flex";
+      img.style.display = "none";
+      err.style.display = "none";
+      footer.style.display = "none";
+      area.classList.remove("has-image");
+    } else {
+      loader.style.display = "none";
+    }
+  }
+
+  function showImage(src) {
+    const img = document.getElementById("result-img");
+    const area = document.getElementById("output-area");
+    const footer = document.getElementById("footer-actions");
+    img.src = src;
+    img.style.display = "block";
+    area.classList.add("has-image");
+    footer.style.display = "flex";
+  }
+
+  function showError(msg) {
+    const err = document.getElementById("error-msg");
+    const placeholder = document.getElementById("placeholder");
+    err.textContent = "⚠ " + msg;
+    err.style.display = "block";
+    placeholder.style.display = "none";
+  }
+
+  function downloadImage() {
+    if (!currentB64) return;
+    const a = document.createElement("a");
+    a.href = "data:image/png;base64," + currentB64;
+    a.download = "ai-generated.png";
+    a.click();
+  }
+</script>
+</body>
+</html>
